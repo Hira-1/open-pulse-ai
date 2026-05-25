@@ -1,11 +1,9 @@
 # Environment
 .env
 
-# Database
-data/*.db
+# Database (WAL temp files only — DB committed for Streamlit Cloud)
 data/*.db-shm
 data/*.db-wal
-!data/.gitkeep
 
 # Generated PDF reports
 *.pdf
