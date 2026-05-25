@@ -1,8 +1,12 @@
 # 🔬 OpenPulse AI — Open-Source Ecosystem Intelligence Platform
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://open-pulse-ai-32rykiqberpte7pgb22nhy.streamlit.app/)
+
 An autonomous monitoring platform that tracks, scores, and analyses the health of leading AI agent frameworks using live GitHub data and AI-powered insights.
 
 > **Track 7 AI frameworks. Score them objectively. Surface risks before they matter.**
+
+**[→ Live Dashboard](https://open-pulse-ai-32rykiqberpte7pgb22nhy.streamlit.app/)**
 
 ---
 
