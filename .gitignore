@@ -1,0 +1,49 @@
+# Environment
+.env
+
+# Database
+data/*.db
+data/*.db-shm
+data/*.db-wal
+!data/.gitkeep
+
+# Generated PDF reports
+*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Streamlit
+.streamlit/*
+!.streamlit/config.toml
+
+# Misc
+*.log
+.pytest_cache/
+.mypy_cache/

@@ -1,0 +1,10 @@
+PyGithub>=2.3.0
+httpx>=0.28.0
+pandas>=2.2.0
+streamlit>=1.37.0
+plotly>=5.24.0
+openai>=1.30.0
+Jinja2>=3.1.4
+python-dotenv>=1.1.0
+fpdf2>=2.7.0
+tenacity>=8.2.0
