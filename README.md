@@ -1,12 +1,27 @@
 # 🔬 OpenPulse AI — Open-Source Ecosystem Intelligence Platform
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://open-pulse-ai-32rykiqberpte7pgb22nhy.streamlit.app/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://open-pulse-ai-32rykiqberpte7pgb22nhy.streamlit.app/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![GitHub API](https://img.shields.io/badge/GitHub_API-REST%20%2B%20GraphQL-181717?style=for-the-badge&logo=github)](https://docs.github.com/en/rest)
 
 An autonomous monitoring platform that tracks, scores, and analyses the health of leading AI agent frameworks using live GitHub data and AI-powered insights.
 
 > **Track 7 AI frameworks. Score them objectively. Surface risks before they matter.**
 
-**[→ Live Dashboard](https://open-pulse-ai-32rykiqberpte7pgb22nhy.streamlit.app/)**
+---
+
+## 🚀 Live Demo
+
+**[→ Open Live Dashboard](https://open-pulse-ai-32rykiqberpte7pgb22nhy.streamlit.app/)**
+
+### Dashboard Overview
+![Dashboard Preview](docs/preview.png)
+
+### Health Score Leaderboard
+![Health Score](docs/healthScore.png)
+
+### Radar Comparison — Top vs Bottom Performers
+![Radar Chart](docs/radar.png)
 
 ---
 
