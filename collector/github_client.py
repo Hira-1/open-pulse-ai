@@ -236,52 +236,32 @@ class GitHubClient:
 
     def get_contributors(self, owner: str, repo: str, top_n: int = 10) -> dict:
         """
-        Contributor metrics via REST /contributors endpoint.
-        Reliable alternative to /stats/contributors which returns 202 indefinitely
-        for large repositories.
+        Contributor metrics via PyGithub paginated list.
 
         Returns:
-          contributors_total    — contributor count (capped at 500 for large repos)
+          contributors_total    — total contributor count from API Link headers
           contributors_new_30d  — unique authors with commits in last 30 days
           top_contributors      — list of {login, contributions, rank}
         """
         self._check_rate_limit()
-        token = os.getenv("GITHUB_TOKEN", "")
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
+        try:
+            gh_repo = self._gh.get_repo(f"{owner}/{repo}")
+            contributors_paged = gh_repo.get_contributors()
+            total = contributors_paged.totalCount
 
-        # Paginate contributors — cap at 5 pages (500) to avoid excessive API use
-        all_contributors: list[dict] = []
-        for page in range(1, 6):
-            try:
-                resp = httpx.get(
-                    f"https://api.github.com/repos/{owner}/{repo}/contributors",
-                    params={"per_page": 100, "page": page},
-                    headers=headers,
-                    timeout=30,
-                )
-            except httpx.RequestError as exc:
-                logger.warning(f"[github_client] Contributors request error: {exc}")
-                break
-            if resp.status_code != 200:
-                break
-            batch = resp.json()
-            if not batch:
-                break
-            all_contributors.extend(batch)
-            if len(batch) < 100:
-                break  # last page reached
-
-        if not all_contributors:
+            top_raw = []
+            for c in contributors_paged[:top_n]:
+                top_raw.append(c)
+        except Exception as exc:
+            logger.warning(f"[github_client] PyGithub contributors error: {exc}")
             return {"contributors_total": 0, "contributors_new_30d": 0, "top_contributors": []}
 
-        total = len(all_contributors)
+        if total == 0:
+            return {"contributors_total": 0, "contributors_new_30d": 0, "top_contributors": []}
+
         top = [
-            {"login": c["login"], "contributions": c["contributions"], "rank": i + 1}
-            for i, c in enumerate(all_contributors[:top_n])
+            {"login": c.login, "contributions": c.contributions, "rank": i + 1}
+            for i, c in enumerate(top_raw)
         ]
 
         # Get unique commit authors in the last 30 days via GraphQL

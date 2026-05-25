@@ -141,6 +141,23 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_contributors_repo_key
                 ON repo_contributors (repo_key);
+
+            -- ----------------------------------------------------------------
+            -- ai_insights
+            -- Pre-generated AI insights stored at collection time.
+            -- scope: 'ecosystem' or 'repo'
+            -- ----------------------------------------------------------------
+            CREATE TABLE IF NOT EXISTS ai_insights (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope        TEXT NOT NULL,
+                repo_key     TEXT,
+                collected_at TEXT NOT NULL,
+                insight_text TEXT NOT NULL,
+                UNIQUE (scope, repo_key, collected_at)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_insights_collected_at
+                ON ai_insights (collected_at);
         """)
     print(f"[database] Initialized at {DB_PATH}")
 

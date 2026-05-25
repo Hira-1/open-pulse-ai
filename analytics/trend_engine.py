@@ -111,12 +111,16 @@ def compute_rankings() -> list[dict]:
     conn = get_connection()
     rows = conn.execute(
         """
-        SELECT repo_key, display_name, stars, forks, commits_30d,
-               contributors_total, health_score, open_issues,
-               releases_30d, avg_issue_close_days
-        FROM repo_snapshots
-        WHERE collected_at = (SELECT MAX(collected_at) FROM repo_snapshots)
-        ORDER BY health_score DESC
+        SELECT s.repo_key, s.display_name, s.stars, s.forks, s.commits_30d,
+               s.contributors_total, s.health_score, s.open_issues,
+               s.releases_30d, s.avg_issue_close_days
+        FROM repo_snapshots s
+        INNER JOIN (
+            SELECT repo_key, MAX(collected_at) AS max_date
+            FROM repo_snapshots GROUP BY repo_key
+        ) latest ON s.repo_key = latest.repo_key
+                AND s.collected_at = latest.max_date
+        ORDER BY s.health_score DESC
         """
     ).fetchall()
     conn.close()

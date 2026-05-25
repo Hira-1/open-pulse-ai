@@ -14,6 +14,7 @@ import argparse
 import logging
 import sys
 import time
+from datetime import datetime, timezone
 
 from utils.logger import setup_logging
 setup_logging()
@@ -22,7 +23,10 @@ from config import TRACKED_REPOS
 from collector.github_client import GitHubClient
 from collector.metrics_collector import MetricsCollector
 from collector.snapshot_writer import SnapshotWriter
-from database.schema import init_db
+from database.schema import init_db, get_connection, managed_connection
+from analytics.health_score import compute_health_score
+from analytics.risk_detector import detect_risks
+from ai.insight_generator import generate_repo_insight, generate_ecosystem_insight
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +96,59 @@ def run(repos: list[dict], dry_run: bool = False) -> None:
 
     if failed > 0:
         sys.exit(1)
+
+    if not dry_run and succeeded > 0:
+        _generate_and_store_insights()
+
+
+def _generate_and_store_insights() -> None:
+    """Generate AI insights from latest snapshots and persist to DB."""
+    log.info("Generating AI insights...")
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT s.* FROM repo_snapshots s
+           INNER JOIN (
+               SELECT repo_key, MAX(collected_at) AS max_date
+               FROM repo_snapshots GROUP BY repo_key
+           ) latest ON s.repo_key = latest.repo_key
+                    AND s.collected_at = latest.max_date"""
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        log.warning("No snapshots found — skipping insight generation.")
+        return
+
+    snapshots = []
+    all_alerts = {}
+    for row in rows:
+        s = dict(row)
+        s.update(compute_health_score(s))
+        all_alerts[s["repo_key"]] = detect_risks(s)
+        snapshots.append(s)
+
+    collected_at = snapshots[0].get("collected_at", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+
+    with managed_connection() as conn:
+        eco_insight = generate_ecosystem_insight(snapshots, all_alerts)
+        conn.execute(
+            "INSERT OR REPLACE INTO ai_insights (scope, repo_key, collected_at, insight_text) "
+            "VALUES (?, ?, ?, ?)",
+            ("ecosystem", None, collected_at, eco_insight),
+        )
+        log.info("  ecosystem insight stored")
+
+        for s in snapshots:
+            alerts = all_alerts.get(s["repo_key"], [])
+            repo_insight = generate_repo_insight(s, alerts)
+            conn.execute(
+                "INSERT OR REPLACE INTO ai_insights (scope, repo_key, collected_at, insight_text) "
+                "VALUES (?, ?, ?, ?)",
+                ("repo", s["repo_key"], collected_at, repo_insight),
+            )
+            log.info(f"  {s['display_name']} insight stored")
+
+    log.info(f"AI insights stored for {collected_at}")
 
 
 if __name__ == "__main__":

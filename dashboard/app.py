@@ -23,7 +23,6 @@ from database.schema import get_connection, init_db
 from analytics.health_score import compute_health_score
 from analytics.risk_detector import detect_risks
 from analytics.trend_engine import compute_trends, compute_rankings
-from ai.insight_generator import generate_repo_insight, generate_ecosystem_insight
 from config import TRACKED_REPOS, SCORE_WEIGHTS, RISK_THRESHOLDS, get_status
 from datetime import datetime
 from fpdf import FPDF
@@ -81,7 +80,7 @@ st.markdown("""
 
 
 # ── Data Loading (cached) ────────────────────────────────────────────
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def load_data():
     """Load all snapshots, compute scores, risks, trends, and rankings."""
     init_db()
@@ -616,7 +615,7 @@ with _hdr_right:
         data=_pdf_data,
         file_name=f"openpulse_report_{datetime.now().strftime('%Y%m%d')}.pdf",
         mime="application/pdf",
-        use_container_width=True,
+        width="stretch",
     )
 
 # ── Chart theme (fixed dark) ─────────────────────────────────────────
@@ -664,7 +663,7 @@ for i, s in enumerate(snapshots, start=1):
 df_leaderboard = pd.DataFrame(leaderboard_data)
 st.dataframe(
     df_leaderboard,
-    use_container_width=True,
+    width="stretch",
     hide_index=True,
     column_config={
         "Health": st.column_config.ProgressColumn(
@@ -774,7 +773,7 @@ fig_bar.update_layout(
     legend_title="Sub-Score",
     **CHART_LAYOUT,
 )
-st.plotly_chart(fig_bar, use_container_width=True, theme=None)
+st.plotly_chart(fig_bar, width="stretch", theme=None)
 
 # ══════════════════════════════════════════════════════════════════════
 # SECTION 5: Radar Chart — Top 3 vs Bottom 3
@@ -808,7 +807,7 @@ with radar_cols[0]:
         showlegend=True,
         **CHART_LAYOUT,
     )
-    st.plotly_chart(fig_top, use_container_width=True, theme=None)
+    st.plotly_chart(fig_top, width="stretch", theme=None)
 
 with radar_cols[1]:
     st.markdown("**Needs Attention**")
@@ -834,7 +833,7 @@ with radar_cols[1]:
         showlegend=True,
         **CHART_LAYOUT,
     )
-    st.plotly_chart(fig_bottom, use_container_width=True, theme=None)
+    st.plotly_chart(fig_bottom, width="stretch", theme=None)
 
 st.markdown("---")
 
@@ -962,7 +961,7 @@ for col, (name, val) in zip([g1, g2, g3, g4, g5], sub_scores):
         },
     ))
     fig_gauge.update_layout(height=200, margin=dict(t=40, b=10, l=20, r=20), **CHART_LAYOUT)
-    col.plotly_chart(fig_gauge, use_container_width=True, theme=None)
+    col.plotly_chart(fig_gauge, width="stretch", theme=None)
 
 # Risk alerts for this repo
 if repo_alerts:
@@ -979,14 +978,21 @@ if repo_alerts:
 if repo_trend and repo_trend.get("has_previous"):
     st.markdown("#### Trends (vs Previous Snapshot)")
     deltas = repo_trend["deltas"]
+    latest_vals = repo_trend["latest"]
     trend_items = ["stars", "health_score", "commits_30d", "open_issues", "contributors_total"]
+    _lower_is_better_display = {"open_issues"}
     tcols = st.columns(len(trend_items))
     for col, key in zip(tcols, trend_items):
         d = deltas.get(key, {})
         val = d.get("value")
-        direction = d.get("direction", "new")
-        arrow = "↑" if direction == "up" else "↓" if direction == "down" else "→"
-        col.metric(key.replace("_", " ").title(), f"{arrow} {val:+.1f}" if val is not None else "N/A")
+        raw = latest_vals.get(key, 0) or 0
+        label = key.replace("_", " ").title()
+        display_val = f"{int(raw):,}" if isinstance(raw, (int, float)) and key != "health_score" else f"{raw:.1f}"
+        if val is not None:
+            delta_color = "inverse" if key in _lower_is_better_display else "normal"
+            col.metric(label, display_val, delta=f"{val:+.1f}", delta_color=delta_color)
+        else:
+            col.metric(label, display_val)
 else:
     st.info("Trend data requires at least 2 collection snapshots. Run `python collect.py` again tomorrow.")
 
@@ -997,12 +1003,38 @@ st.markdown("---")
 # ══════════════════════════════════════════════════════════════════════
 st.subheader("🤖 AI-Powered Insights")
 
+_insight_date = snapshots[0].get("collected_at", "")
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_insights(collected_at: str) -> dict:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT scope, repo_key, insight_text FROM ai_insights WHERE collected_at = ?",
+        (collected_at,),
+    ).fetchall()
+    conn.close()
+    result = {"ecosystem": None, "repos": {}}
+    for row in rows:
+        if row["scope"] == "ecosystem":
+            result["ecosystem"] = row["insight_text"]
+        else:
+            result["repos"][row["repo_key"]] = row["insight_text"]
+    return result
+
+_insights = _load_insights(_insight_date)
+_NO_INSIGHT_MSG = (
+    "_No pre-generated insight available. "
+    "Run `python collect.py` with your OpenAI key to generate insights._"
+)
+
 tab_eco, tab_repo = st.tabs(["Ecosystem Overview", "Per-Repo Analysis"])
 
 with tab_eco:
-    with st.spinner("Generating ecosystem insight..."):
-        eco_insight = generate_ecosystem_insight(snapshots, all_alerts)
-    st.markdown(eco_insight)
+    if _insights["ecosystem"]:
+        st.caption(f"Generated on: {_insight_date}")
+        st.markdown(_insights["ecosystem"])
+    else:
+        st.info(_NO_INSIGHT_MSG)
 
 with tab_repo:
     insight_repo = st.selectbox(
@@ -1012,11 +1044,12 @@ with tab_repo:
         key="insight_repo_select",
     )
     insight_snapshot = next(s for s in snapshots if s["display_name"] == insight_repo)
-    insight_alerts = all_alerts.get(insight_snapshot["repo_key"], [])
-
-    with st.spinner(f"Generating insight for {insight_repo}..."):
-        repo_insight = generate_repo_insight(insight_snapshot, insight_alerts)
-    st.markdown(repo_insight)
+    stored = _insights["repos"].get(insight_snapshot["repo_key"])
+    if stored:
+        st.caption(f"Generated on: {_insight_date}")
+        st.markdown(stored)
+    else:
+        st.info(_NO_INSIGHT_MSG)
 
 st.markdown("---")
 
@@ -1070,7 +1103,7 @@ if len(snapshot_dates) >= 2:
     conn.close()
 
     df_history = pd.DataFrame([dict(r) for r in history_rows])
-    df_history["collected_at"] = pd.to_datetime(df_history["collected_at"])
+    df_history["collected_at"] = pd.to_datetime(df_history["collected_at"], format="mixed")
 
     trend_tab1, trend_tab2, trend_tab3, trend_tab4 = st.tabs([
         "Health Over Time", "Stars Growth", "Issue Backlog", "Commit Activity"
@@ -1080,25 +1113,25 @@ if len(snapshot_dates) >= 2:
         fig_h = px.line(df_history, x="collected_at", y="health_score", color="display_name",
                         title="Health Score Over Time", markers=True)
         fig_h.update_layout(**CHART_LAYOUT)
-        st.plotly_chart(fig_h, use_container_width=True, theme=None)
+        st.plotly_chart(fig_h, width="stretch", theme=None)
 
     with trend_tab2:
         fig_s = px.line(df_history, x="collected_at", y="stars", color="display_name",
                         title="Stars Growth Over Time", markers=True)
         fig_s.update_layout(**CHART_LAYOUT)
-        st.plotly_chart(fig_s, use_container_width=True, theme=None)
+        st.plotly_chart(fig_s, width="stretch", theme=None)
 
     with trend_tab3:
         fig_i = px.line(df_history, x="collected_at", y="open_issues", color="display_name",
                         title="Open Issues Trend", markers=True)
         fig_i.update_layout(**CHART_LAYOUT)
-        st.plotly_chart(fig_i, use_container_width=True, theme=None)
+        st.plotly_chart(fig_i, width="stretch", theme=None)
 
     with trend_tab4:
         fig_c = px.line(df_history, x="collected_at", y="commits_30d", color="display_name",
                         title="Commit Activity (30-day window)", markers=True)
         fig_c.update_layout(**CHART_LAYOUT)
-        st.plotly_chart(fig_c, use_container_width=True, theme=None)
+        st.plotly_chart(fig_c, width="stretch", theme=None)
 else:
     st.info(
         f"📊 Trend charts require at least 2 collection runs. "
@@ -1118,12 +1151,17 @@ with st.sidebar:
 
     st.markdown("**Data Status**")
     st.markdown(f"- Repos tracked: **{len(snapshots)}**")
-    st.markdown(f"- Last collected: **{snapshots[0].get('collected_at', 'N/A')}**")
+    _raw_ts = str(snapshots[0].get("collected_at", "")).strip()
+    try:
+        _collected_display = pd.to_datetime(_raw_ts).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        _collected_display = _raw_ts[:16]
+    st.markdown(f"- Last collected: **{_collected_display}**")
     st.markdown(f"- Avg health: **{avg_health:.1f}**/100")
     st.markdown("---")
 
     st.markdown("**Controls**")
-    if st.button("🔄 Refresh Data", use_container_width=True):
+    if st.button("🔄 Refresh Data", use_container_width=False):
         st.cache_data.clear()
         st.rerun()
 
@@ -1230,7 +1268,7 @@ def weight_simulator():
             yaxis_title="Health Score", height=400,
             **CHART_LAYOUT,
         )
-        st.plotly_chart(fig_sim, use_container_width=True, theme=None)
+        st.plotly_chart(fig_sim, width="stretch", theme=None)
 
     with sim_table_col:
         for i, row in enumerate(sim_data):

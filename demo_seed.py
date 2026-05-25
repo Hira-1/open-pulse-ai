@@ -113,7 +113,7 @@ def seed_demo_data(days: int = 7, reset: bool = False):
     with managed_connection() as conn:
         for day_offset in range(days - 1, -1, -1):
             date = today - timedelta(days=day_offset)
-            collected_at = date.strftime("%Y-%m-%d %H:%M:%S")
+            collected_at = date.strftime("%Y-%m-%d")
 
             for repo_cfg in TRACKED_REPOS:
                 repo_key = f"{repo_cfg['owner']}/{repo_cfg['repo']}"
@@ -130,6 +130,8 @@ def seed_demo_data(days: int = 7, reset: bool = False):
                         snapshot[key] = base_val + (days - 1 - day_offset) * random.randint(20, 80)
                     elif key == "forks":
                         snapshot[key] = base_val + (days - 1 - day_offset) * random.randint(3, 15)
+                    elif key == "contributors_total":
+                        snapshot[key] = base_val + (days - 1 - day_offset) * random.randint(0, 2)
                     elif key == "days_since_last_release":
                         snapshot[key] = max(0, base_val + day_offset)
                     else:
